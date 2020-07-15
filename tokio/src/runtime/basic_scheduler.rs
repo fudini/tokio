@@ -33,6 +33,9 @@ where
 
     /// Thread park handle
     park: P,
+
+    /// Busy wait
+    busy_wait: bool
 }
 
 #[derive(Clone)]
@@ -84,7 +87,7 @@ impl<P> BasicScheduler<P>
 where
     P: Park,
 {
-    pub(crate) fn new(park: P) -> BasicScheduler<P> {
+    pub(crate) fn new(park: P, busy_wait: bool) -> BasicScheduler<P> {
         let unpark = Box::new(park.unpark());
 
         BasicScheduler {
@@ -100,6 +103,7 @@ where
             },
             tick: 0,
             park,
+            busy_wait,
         }
     }
 
@@ -154,8 +158,13 @@ where
                     match next {
                         Some(task) => crate::coop::budget(|| task.run()),
                         None => {
-                            // Park until the thread is signaled
-                            scheduler.park.park().ok().expect("failed to park");
+                            if scheduler.busy_wait {
+                                // Do not park
+                                scheduler.park.park_timeout(Duration::from_millis(0)).ok().expect("failed to park");
+                            } else {
+                                // Park until the thread is signaled
+                                scheduler.park.park().ok().expect("failed to park");
+                            }
 
                             // Try polling the `block_on` future next
                             continue 'outer;

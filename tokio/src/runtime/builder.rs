@@ -55,6 +55,9 @@ pub struct Builder {
     /// Cap on thread usage.
     max_threads: usize,
 
+    /// Enable busy wait
+    busy_wait: bool,
+
     /// Name used for threads spawned by the runtime.
     pub(super) thread_name: String,
 
@@ -97,6 +100,8 @@ impl Builder {
             core_threads: None,
 
             max_threads: 512,
+
+            busy_wait: false,
 
             // Default thread name
             thread_name: "tokio-runtime-worker".into(),
@@ -194,6 +199,16 @@ impl Builder {
         self
     }
 
+    /// If set the basic scheduler will do busy-wait on epoll to avoid context swtiches and improve
+    /// latency (for the price of cooking the CPU at 100%)
+    ///
+    /// The similar option has been added to netty
+    ///
+    /// https://github.com/netty/netty/pull/8267
+    pub fn busy_wait(&mut self, val: bool) -> &mut Self {
+        self.busy_wait = val;
+        self
+    }
     /// Sets name of threads spawned by the `Runtime`'s thread pool.
     ///
     /// The default name is "tokio-runtime-worker".
@@ -425,7 +440,7 @@ cfg_rt_core! {
             // there are no futures ready to do something, it'll let the timer or
             // the reactor to generate some new stimuli for the futures to continue
             // in their life.
-            let scheduler = BasicScheduler::new(driver);
+            let scheduler = BasicScheduler::new(driver, self.busy_wait);
             let spawner = Spawner::Basic(scheduler.spawner().clone());
 
             // Blocking pool
